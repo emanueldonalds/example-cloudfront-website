@@ -6,7 +6,6 @@ Parameters:
   CertificateArn:
     Type: String
     Description: ARN of the Certificate
-    Default: 
   DomainName:
     Type: String
     Default: static-website.example.edonalds.com
@@ -18,13 +17,10 @@ Parameters:
     Default: emanueldonalds/example-website
   CodeStarConnectionArn:
     Type: String
-    Default: 
   OriginAccessIdentity:
     Type: String
-    Default: 
   CanonicalUser:
     Type: String
-    Default: 
 
 Resources:
 # Bucket
