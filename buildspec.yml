@@ -1,0 +1,17 @@
+version: 0.1
+
+phases:
+  install:
+    commands:
+      - echo No installation needed.
+  pre_build:
+    commands:
+      - chmod +x build.sh
+  build:
+    commands:
+      - ./build.sh
+artifacts:
+  files:
+    - "**/*"
+  discard-paths: no
+  base-directory: dist

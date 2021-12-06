@@ -1,0 +1,262 @@
+Parameters:
+  Name:
+    Type: String
+    Description: Website name
+    Default: example-static-website
+  CertificateArn:
+    Type: String
+    Description: ARN of the Certificate
+    Default: 
+  DomainName:
+    Type: String
+    Default: static-website.example.edonalds.com
+  HostedZone:
+    Type: String
+    Default: edonalds.com
+  GitHubRepo:
+    Type: String
+    Default: emanueldonalds/example-website
+  CodeStarConnectionArn:
+    Type: String
+    Default: 
+  OriginAccessIdentity:
+    Type: String
+    Default: 
+  CanonicalUser:
+    Type: String
+    Default: 
+
+Resources:
+# Bucket
+  Bucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName:
+        Fn::Join: 
+          - "-"
+          - 
+            - !Ref Name
+            - "bucket"
+      
+  BucketPolicy:
+    Type: "AWS::S3::BucketPolicy"
+    Properties: 
+      Bucket: !Ref Bucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement: 
+        - 
+          Action: 
+            - "s3:GetObject"
+          Effect: "Allow"
+          Resource: 
+            Fn::Join: 
+              - ""
+              - 
+                -  !GetAtt Bucket.Arn
+                - "/*"
+          Principal:
+            CanonicalUser: !Ref CanonicalUser
+
+# CloudFront distribution
+  CloudfrontDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties: 
+      DistributionConfig:
+        Enabled: true
+        DefaultRootObject: index.html
+        Origins:
+          - DomainName: !GetAtt Bucket.DomainName
+            Id:
+              Fn::Join: 
+                - "-"
+                - 
+                  - !Ref Name
+                  - "bucket"
+            S3OriginConfig:
+              OriginAccessIdentity: !Ref OriginAccessIdentity
+        DefaultCacheBehavior: 
+          TargetOriginId:
+            Fn::Join: 
+              - "-"
+              - 
+                - !Ref Name
+                - "bucket"
+          ViewerProtocolPolicy: redirect-to-https
+          ForwardedValues:
+            QueryString: false
+            Cookies:
+              Forward: none
+        Aliases: 
+          - !Ref DomainName
+          - Fn::Join:
+              - "."
+              - 
+                - www
+                - !Ref DomainName
+        ViewerCertificate: 
+          AcmCertificateArn: !Ref CertificateArn
+          MinimumProtocolVersion: TLSv1.2_2021
+          SslSupportMethod: sni-only
+
+# Route 53 entries
+  DNSRecord:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneName:
+        Fn::Join:
+          - ""
+          -
+            - !Ref HostedZone
+            - "."
+      Name: 
+        Fn::Join:
+          - ""
+          -
+            - !Ref DomainName
+            - "."
+      Type: A
+      AliasTarget:
+        HostedZoneId: Z2FDTNDATAQYW2
+        DNSName: !GetAtt CloudfrontDistribution.DomainName
+  DNSWWWRecord:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneName:
+        Fn::Join:
+          - ""
+          -
+            - !Ref HostedZone
+            - "."
+      Name:
+        Fn::Join:
+          - ""
+          -
+            - "www."
+            - !Ref DomainName
+            - "."
+      Type: A
+      AliasTarget:
+        HostedZoneId: Z2FDTNDATAQYW2
+        DNSName: !GetAtt CloudfrontDistribution.DomainName
+
+# Code Pipeline
+  ArtifactStoreBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      VersioningConfiguration:
+        Status: Enabled
+  Pipeline:
+    Type: AWS::CodePipeline::Pipeline
+    Properties:
+      ArtifactStore:
+        Location: !Ref 'ArtifactStoreBucket'
+        Type: S3
+      Name: !Ref Name
+      RoleArn: !GetAtt [PipelineRole, Arn]
+      Stages:
+        - Name: Source
+          Actions:
+            - Name: Source
+              ActionTypeId:
+                Category: Source
+                Owner: AWS
+                Provider: CodeStarSourceConnection
+                Version: '1'
+              Configuration:
+                ConnectionArn: !Ref CodeStarConnectionArn
+                FullRepositoryId: !Ref GitHubRepo
+                BranchName: main
+              OutputArtifacts:
+                - Name: AppSource
+              RunOrder: '1'
+        - Name: Build
+          Actions:
+            - Name: Build
+              ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Provider: CodeBuild
+                Version: '1'
+              Configuration:
+                ProjectName: !Ref CodeBuildProject
+              InputArtifacts:
+                - Name: AppSource
+              OutputArtifacts:
+                - Name: BuildArtifact
+              RunOrder: '1'
+        - Name: Deploy  
+          Actions:  
+          - Name: Deploy
+            ActionTypeId:
+              Category: Deploy
+              Owner: AWS
+              Provider: S3
+              Version: '1'
+            InputArtifacts:
+              - Name: BuildArtifact
+            Configuration: 
+              BucketName: !Ref Bucket
+              Extract: 'true'
+            RunOrder: 1
+  CodeBuildProject:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Artifacts:
+        Type: CODEPIPELINE
+      Source:
+        Type: CODEPIPELINE
+      Environment:
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: aws/codebuild/standard:4.0
+        Type: LINUX_CONTAINER
+      Name: !Ref Name
+      ServiceRole:
+        Fn::GetAtt:
+        - CodeBuildRole
+        - Arn
+  PipelineRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Action: ['sts:AssumeRole']
+          Effect: Allow
+          Principal:
+            Service: [codepipeline.amazonaws.com]
+        Version: '2012-10-17'
+      Path: /
+      Policies:
+        - PolicyName: CodePipelineAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Action:
+                - 's3:*'
+                - 'cloudformation:CreateStack'
+                - 'cloudformation:DescribeStacks'
+                - 'cloudformation:DeleteStack'
+                - 'cloudformation:UpdateStack'
+                - 'cloudformation:CreateChangeSet'
+                - 'cloudformation:ExecuteChangeSet'
+                - 'cloudformation:DeleteChangeSet'
+                - 'cloudformation:DescribeChangeSet'
+                - 'cloudformation:SetStackPolicy'
+                - 'iam:PassRole'
+                - 'sns:Publish'
+                - 'codebuild:*'
+                - 'codestar-connections:UseConnection'
+                Effect: Allow
+                Resource: '*'
+  CodeBuildRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          Effect: Allow
+          Principal:
+            Service: codebuild.amazonaws.com
+          Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AdministratorAccess
