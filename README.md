@@ -6,7 +6,7 @@ This project contains a CloudFormation script that sets up a CloudFront distribu
 Either set the Default values of parameters in the CloudFormation script, or change the values in the UI when creating the stack.
 
 ## Origin Access Identity
-An Origin Access Identity must be exist. If you have none, create a new OAI in the CloudFront UI.
+An Origin Access Identity must exist. If you have none, create a new OAI in the CloudFront UI.
 
 Set parameter ```CanonicalUser``` to the OAI Canonical user ID.
 
