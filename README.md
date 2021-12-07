@@ -18,7 +18,7 @@ Set parameter ```CertificateArn``` to the ARN of your desired certificate in ACM
 ## DNS
 Set parameter ```HostedZone``` to your hosted zone in Route53.
 
-Set parameter ```DomainName```
+Set parameter ```DomainName``` to the domain that the website should exist on.
 
 ## CodeStar source connection for GitHub.
 A CodeStar source connection must be created manually for AWS to be able to retrieve source from GitHub. Create or use an existing connection.
